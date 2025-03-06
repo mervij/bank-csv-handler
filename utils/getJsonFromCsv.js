@@ -2,98 +2,95 @@ import jsonToCsv from "./jsonToCsv.js";
 import csvToJson from 'convert-csv-to-json';
 import * as Constants from '../constants.js';
 
+// Initialize category objects for actions and amounts
+function initializeCategoryObjects() {
+  const actionsByCategory = Object.keys(Constants.KEY_WORDS_BY_CATEGORIES).reduce((acc, key) => {
+    acc[key] = {};
+    return acc;
+  }, {});
+
+  actionsByCategory[Constants.OTHERS] = {};
+  actionsByCategory[Constants.INCOMES] = {};
+
+  const categoryAmounts = Object.keys(Constants.KEY_WORDS_BY_CATEGORIES).reduce((acc, key) => {
+    acc[key] = 0.0;
+    return acc;
+  }, {});
+
+  categoryAmounts[Constants.OTHERS] = 0.0;
+  categoryAmounts[Constants.ALL_EXPENSES] = 0.0;
+  categoryAmounts[Constants.INCOMES] = 0.0;
+
+  return { actionsByCategory, categoryAmounts };
+}
+
+// Process each transaction and categorize it
+function processTransaction(obj, bankActionColumnKey, bankAmountColumnKey, actionsByCategory, categoryAmounts) {
+  let added = false;
+  const amount = parseFloat(obj[bankAmountColumnKey]);
+
+  if (amount > 0) {
+    categoryAmounts[Constants.INCOMES] += amount;
+    addOrUpdateAction(actionsByCategory[Constants.INCOMES], obj[bankActionColumnKey], amount);
+    added = true;
+  } else {
+    for (const category of Object.keys(Constants.KEY_WORDS_BY_CATEGORIES)) {
+      if (Constants.KEY_WORDS_BY_CATEGORIES[category].some(word => obj[bankActionColumnKey].toLowerCase().includes(word.toLowerCase()))) {
+        categoryAmounts[category] += amount;
+        addOrUpdateAction(actionsByCategory[category], obj[bankActionColumnKey], amount);
+        added = true;
+        break;
+      }
+    }
+  }
+
+  if (!added) {
+    categoryAmounts[Constants.OTHERS] += amount;
+    addOrUpdateAction(actionsByCategory[Constants.OTHERS], obj[bankActionColumnKey], amount);
+  }
+}
+
+// Add a new action or update an existing action in a category
+function addOrUpdateAction(category, action, amount) {
+  if (!category[action]) {
+    category[action] = amount;
+  } else {
+    category[action] += amount;
+  }
+}
+
+// Calculate the total expenses excluding incomes
+function calculateTotalExpenses(categoryAmounts) {
+  return Object.keys(categoryAmounts).reduce((sum, key) => {
+    if (key !== Constants.INCOMES) {
+      sum += categoryAmounts[key];
+    }
+    return sum;
+  }, 0);
+}
+
+// Main function to process uploaded files and generate CSV
 export default function getJsonFromCsv(files) {
+  const { actionsByCategory, categoryAmounts } = initializeCategoryObjects();
 
-  const incomes = 'TULOT';
-  const allExpenses = 'KULUT YHTEENSÄ';
-  const others = 'MUUT KULUT';
+  Object.values(files).forEach(uploadedFile => {
+    const jsonArray = csvToJson.supportQuotedField(true).getJsonFromCsv(uploadedFile.tempFilePath);
+    const bankActionColumnKey = Object.keys(jsonArray[0]).find(key => Constants.BANK_ACTION_COLUMN.includes(key));
+    const bankAmountColumnKey = Object.keys(jsonArray[0]).find(key => Constants.BANK_AMOUNT_COLUMN.includes(key));
 
-  // Initialize actionsByCategory object with empty arrays for each category
-  const actionsByCategory = Object.keys(Constants.keyWordsByCategory).reduce((acc, key) => {
-   acc[key] = {};
-   return acc;
- }, {});
+    if (bankActionColumnKey && bankAmountColumnKey) {
+      jsonArray.forEach(obj => {
+        processTransaction(obj, bankActionColumnKey, bankAmountColumnKey, actionsByCategory, categoryAmounts);
+      });
+    }
 
- // Add an empty array for incomes and others
- actionsByCategory[others] = {};
- actionsByCategory[incomes] = {};
+    console.log(`File Name: ${uploadedFile.name}`);
+    console.log(`File Size: ${uploadedFile.size}`);
+    console.log(`File MD5 Hash: ${uploadedFile.md5}`);
+    console.log(`File Mime Type: ${uploadedFile.mimetype}`);
+  });
 
- const categoryAmounts = Object.keys(Constants.keyWordsByCategory).reduce((acc, key) => {
-   acc[key] = 0.0;
-   return acc;
- }, {});
+  categoryAmounts[Constants.ALL_EXPENSES] = calculateTotalExpenses(categoryAmounts);
 
- // Add an empty array for incomes and others
- categoryAmounts[others] = 0.0;
- categoryAmounts[allExpenses] = 0.0;
- categoryAmounts[incomes] = 0.0;
-
- Object.values(files).forEach(uploadedFile => {
-   const jsonArray = csvToJson.supportQuotedField(true).getJsonFromCsv(uploadedFile.tempFilePath);
-
-   const bankActionColumnKey = Object.keys(jsonArray[0]).find(key => Constants.bankActionColumn.includes(key));
-   const bankAmountColumnKey = Object.keys(jsonArray[0]).find(key => Constants.bankAmountColumn.includes(key));
-
-   if (bankActionColumnKey && bankAmountColumnKey) {
-     
-     jsonArray.forEach(obj => {
-       let added = false;
-
-       if (parseFloat(obj[bankAmountColumnKey]) > 0) {
-         categoryAmounts[incomes] += parseFloat(obj[bankAmountColumnKey]);
-
-         
-         // Add action to actionsByCategory, if it doesn't exist already
-         if (Object.keys(actionsByCategory[incomes]).length === 0 || Object.keys(actionsByCategory[incomes]).every(action => action !== obj[bankActionColumnKey])) {
-           actionsByCategory[incomes][obj[bankActionColumnKey]] = obj[bankAmountColumnKey];
-         } else {
-           // If action already exists, add the amount to the existing amount
-           actionsByCategory[incomes][obj[bankActionColumnKey]] = parseFloat(actionsByCategory[incomes][obj[bankActionColumnKey]]) + parseFloat(obj[bankAmountColumnKey]);
-         }
-         added = true;
-       } else {
-         for (const category of Object.keys(Constants.keyWordsByCategory)) {
-           if (Constants.keyWordsByCategory[category].some(word => obj[bankActionColumnKey].toLowerCase().includes(word.toLowerCase()))) {
-             categoryAmounts[category] += parseFloat(obj[bankAmountColumnKey]);
-             added = true;
-             
-             if (Object.keys(actionsByCategory[category]).length === 0 || Object.keys(actionsByCategory[category]).every(action => action !== obj[bankActionColumnKey])) {
-               actionsByCategory[category][obj[bankActionColumnKey]] = parseFloat(obj[bankAmountColumnKey]);
-             } else {
-               // If action already exists, add the amount to the existing amount
-               actionsByCategory[category][obj[bankActionColumnKey]] = parseFloat(actionsByCategory[category][obj[bankActionColumnKey]]) + parseFloat(obj[bankAmountColumnKey]);
-             }
-             break;
-           }
-         }
-       }
-
-       if (!added) {
-         categoryAmounts[others] += parseFloat(obj[bankAmountColumnKey]);
-         if (Object.keys(actionsByCategory[others]).length === 0 || Object.keys(actionsByCategory[others]).every(action => action !== obj[bankActionColumnKey])) {
-           actionsByCategory[others][obj[bankActionColumnKey]] = obj[bankAmountColumnKey];
-         } else {
-           actionsByCategory[others][obj[bankActionColumnKey]] = parseFloat(actionsByCategory[others][obj[bankActionColumnKey]]) + parseFloat(obj[bankAmountColumnKey]);
-         }
-       }
-     });
-   }
-
-   // Print information about the file to the console
-   console.log(`File Name: ${uploadedFile.name}`);
-   console.log(`File Size: ${uploadedFile.size}`);
-   console.log(`File MD5 Hash: ${uploadedFile.md5}`);
-   console.log(`File Mime Type: ${uploadedFile.mimetype}`);
- });
-
- // count all actions except incomes and add new key, value pair to categoryAmounts called 'kulutYhteensa'.
- let expensesSum = 0;
- Object.keys(categoryAmounts).forEach(key => {
-   if (key !== incomes) {
-     expensesSum += categoryAmounts[key];
-   }
- });
- categoryAmounts[allExpenses] = expensesSum;
- 
- return jsonToCsv(categoryAmounts, actionsByCategory);
+  return jsonToCsv(categoryAmounts, actionsByCategory);
 }

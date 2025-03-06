@@ -1,21 +1,19 @@
+import * as Constants from '../constants.js';
+
+// Convert JSON data to CSV format
 export default function jsonToCsv(jsonObject, categoryJson) {
+  let csv = Constants.CSV_COLUMN_TITLES;
 
-  let csv = 'KATEGORIA, SUMMA\n';
-  for (const [key, value] of Object.entries(jsonObject)) {
-    csv += `${key}, ${value}\n`;
+  for (const [category, amount] of Object.entries(jsonObject)) {
+    csv += `${category}, ${amount}\n`;
 
-    if (categoryJson[key] && Object.keys(categoryJson[key]).length > 0) {
-
-      for (const [key1, value1] of Object.entries(categoryJson[key])) {
-        const amount = value1.toString().replace(',', '.');
-        // Remove commas from key1
-        const key1Trimmed = key1.replace(/,/g, '');
-        csv += `***${key1Trimmed}, ${amount}\n`;
+    if (categoryJson[category] && Object.keys(categoryJson[category]).length > 0) {
+      for (const [action, actionAmount] of Object.entries(categoryJson[category])) {
+        const sanitizedAction = action.replace(/,/g, ''); // Remove commas from action
+        csv += `***${sanitizedAction}, ${actionAmount}\n`;
       }
     }
   }
-
-  csv += '\n\n';
 
   return csv;
 }

@@ -1,10 +1,9 @@
-<h2>Bank csv file handler</h2>
-<form action="/upload" 
+<h1>Bank CSV File Handler</h1>
+<p>Select one or two CSV files to generate a summary CSV file.</p>
+<form action="/generate" 
       method="post" 
       enctype="multipart/form-data">
   <input type="file" name="file1" />
   <input type="file" name="file2" />
-  <button type="submit">Upload</button>
-<script>
-  // Paste the JavaScript code here
-</script>
+  <button type="submit">Generate and upload CSV file</button>
+</form>
